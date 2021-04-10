@@ -1,10 +1,6 @@
-# for bokeh
-
-def no_border_hook(plot, element):
-    plot.handles['plot'].min_border_left = 0
-    plot.handles['plot'].min_border_right = 0
-#     plot.handles['plot'].min_border_top = 0
-#     plot.handles['plot'].min_border_bottom = 0
+"""
+HoloViews hooks for use with bokeh backend.
+"""
 
 def y_bare_hook(plot, element):
     plot.handles['yaxis'].visible = False
