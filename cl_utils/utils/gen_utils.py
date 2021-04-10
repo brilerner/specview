@@ -66,19 +66,19 @@ def get_extents(x, y):
      (x0, y0, x1, y1) : tuple
           The image extents.
      """
-    x0, x1 = min(x), max(x)
-    y0, y1 = min(y), max(y)
-    dx = np.abs(x1-x0)
-    dy = np.abs(y1-y0)
-    cushion = (dx-dy)/2
-    if dx>dy:
-        y0 -= cushion
-        y1 += cushion
-    else:
-        x0 -= cushion
-        x1 += cushion
+     x0, x1 = min(x), max(x)
+     y0, y1 = min(y), max(y)
+     dx = np.abs(x1-x0)
+     dy = np.abs(y1-y0)
+     cushion = (dx-dy)/2
+     if dx>dy:
+          y0 -= cushion
+          y1 += cushion
+     else:
+          x0 -= cushion
+          x1 += cushion
 
-    return tuple(map(float, [x0, y0, x1, y1]))
+     return tuple(map(float, [x0, y0, x1, y1]))
 
 def get_percentiles(arr, lthresh=2, uthresh=98):
     """

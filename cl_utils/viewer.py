@@ -121,20 +121,6 @@ class BaseSpecViewer(BasePanViewer):
         self.band = center - self.bw/2, center + self.bw/2
         self.center = center
 
-    @param.depends('band', watch=True)
-    def set_text_from_band(self):
-        """ """
-        center = np.average(self.band)
-        bw = np.diff((self.band))[0]
-        center, bw = np.round(center,1), np.round(bw,1)
-        self.center = center
-        self.bw = bw
-        
-    @param.depends('center', 'bw', watch=True)
-    def set_band_from_text(self):
-        """ """
-        lower = self.center - self.bw/2
-        upper = self.center + self.bw/2
 
     def get_band_dmap(self):
         """ 
@@ -153,9 +139,7 @@ class BaseSpecViewer(BasePanViewer):
         """ 
         Get an organized panel containing the band controls and visualization.
         """
-        input_params = pn.Row(self.param.center, self.param.bw)
         return  pn.Column(
-                    input_params, 
                     pn.Column(
                         pn.Row(self.param.band, margin = (0, 0, -25, 0)),
                         pn.pane.HoloViews(self.get_band_dmap(), linked_axes=False)
