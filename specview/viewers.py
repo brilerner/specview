@@ -6,19 +6,11 @@ import holoviews as hv
 from holoviews import opts, dim, streams
 import numpy as np
 import panel as pn
+pn.extension()
 import param
 
 from specview.utils import hdf2xds, get_ranges, stretch_arr, get_percentiles, get_extents
 from specview.hooks import y_bare_hook, transp_hook
-
-css = '''
-.bk.panel-widget-box {
-  background: #f0f0f0;
-  border-radius: 5px;
-  border: 1px black solid;
-}
-'''
-pn.extension(raw_css=[css])
 
 class BasePanViewer(param.Parameterized):
     """
@@ -27,7 +19,7 @@ class BasePanViewer(param.Parameterized):
     acq : hdf5 group
         Typically selected from Odemis hdf5 file.
     """
-    thresholds = param.Range(default=(2,98), bounds=(0,100), doc="outlier percentiles", label='thresholds')
+    thresholds = param.Range(default=(2,98), bounds=(0,100), doc="outlier percentiles", label='Thresholds')
     alpha = param.Number(default=0.5, bounds=(0,1), label='Alpha')
 
     def __init__(self, acq, **params):
@@ -56,7 +48,8 @@ class BasePanViewer(param.Parameterized):
         img = img.redim(x=dict(range=(x0,x1)), y=dict(range=(y0,y1)))
 
         # set opts
-        img_opts = opts.Image(frame_width=350, frame_height=350,
+        img_side = 350
+        img_opts = opts.Image(frame_width=img_side, frame_height=img_side,
                                 cmap='gray', xlabel='units in µm', ylabel='')
         return img.opts(img_opts)        
 
@@ -69,8 +62,11 @@ class BasePanViewer(param.Parameterized):
         dmap = hv.DynamicMap(plot_img, streams=self.streams)
         return dmap.apply.opts(alpha=self.param.alpha)
 
+    def get_controls(self):
+        return pn.Param(self.param, width=150, display_threshold=1, show_name=False)
+
     def view(self):
-        return pn.Row(self.param, self.get_dmap(), background='white')
+        return pn.Row(self.get_controls(), self.get_dmap(), background='white')
 
 class BaseSpecViewer(BasePanViewer):
     """ 
@@ -121,7 +117,6 @@ class BaseSpecViewer(BasePanViewer):
         self.band = center - self.bw/2, center + self.bw/2
         self.center = center
 
-
     def get_band_dmap(self):
         """ 
         Get a DynamicMap which is an Overlay of the aggregated spectrum with a shaded box defining the current band selection.
@@ -141,19 +136,21 @@ class BaseSpecViewer(BasePanViewer):
         """
         return  pn.Column(
                     pn.Column(
-                        pn.Row(self.param.band, margin = (0, 0, -25, 0)),
+                        pn.Row(self.get_controls(), margin = (0, 0, -25, 0)),
                         pn.pane.HoloViews(self.get_band_dmap(), linked_axes=False)
                         ), 
-                    css_classes=['panel-widget-box'],
                     )
 
-    def view(self):
-        controls = pn.Column(
-                        self.param.alpha,
-                        self.param.thresholds, 
-                        self.get_band_panel()
-                         )
-        return pn.Row(controls, self.get_dmap(), background='white')
+    def get_controls(self):
+        """ 
+        Get an organized panel containing the band controls and visualization.
+        """
+        return  pn.Column(
+                    pn.Column(
+                        pn.Row(super().get_controls(), margin = (0, 0, -25, 0)),
+                        pn.pane.HoloViews(self.get_band_dmap(), linked_axes=False)
+                        ), 
+                    )
     
 class BaseSpecViewerROI(BaseSpecViewer):
     """ 
@@ -162,7 +159,7 @@ class BaseSpecViewerROI(BaseSpecViewer):
     acq : hdf5 group
         Typically selected from Odemis hdf5 file.
     """
-    roi_toggle = param.Selector(objects=["CL", "Trans"])
+    roi_toggle = param.Selector(objects=["CL", "Trans"], precedence=0.5)
     color_cycle = param.List(['red', 'green', 'blue', 'orange', 'purple', 'cyan', \
                    'magenta', 'maroon', 'teal', 'navy', 'brown', 'pink'], precedence=-1)
     rect_coords = param.List(precedence=-1)
@@ -177,14 +174,17 @@ class BaseSpecViewerROI(BaseSpecViewer):
         Callable for dynamically streaming curves to ROI chart based on shape selections.
         """
         if not data or not any(len(d) for d in data.values()):
+            self.roi_traces = None
             default_curve = hv.Curve([], 'Spectrum', 'CL').opts(color='red') 
             return hv.NdOverlay({0: default_curve}).opts(show_legend=False) # code breaks without using a curve in ndoverlay
         
         curves = {}
         data = zip(data['x0'], data['x1'], data['y0'], data['y1'])
+        self.roi_traces = []
         for i, (x0, x1, y0, y1) in enumerate(data):
             selection = self.xds.sel(x=slice(x0, x1), y=slice(y1, y0))
             selection_avg = selection.mean(['x','y'])
+            self.roi_traces.append(selection_avg)
             if self.roi_toggle == 'Trans': # apparently param knows when this changes without having to make it a 'stream' var
                 if i == 0:
                     substrate = selection_avg.copy()
@@ -229,60 +229,10 @@ class BaseSpecViewerROI(BaseSpecViewer):
                      css_classes=['panel-widget-box'])
 
     def view(self):
-        img_params = pn.Column(self.param.alpha, self.param.thresholds, self.param.band)
-        img_panel = pn.Row(
-                        img_params,
-                        self.get_dmap()*self.get_polys()
-                        )
-        return pn.Row(
-                    img_panel,
-                    self.get_roi_panel(),
-                    background='white'
-                    )
-
-class Spectrum(param.Parameterized):
-    """ 
-    Generates a dashboard containing the first three acquisitions of an Odemis hdf5 file with associated controls and ROI interactivity.
-
-    h5 : in-memory hdf5 file
-        Typically an Odemis hdf5 file.
-    """
-    def __init__(self, h5, **params):
-        super().__init__(**params)
-        self.process_h5(h5)
-
-
-    def process_h5(self, h5): 
-        self.Survey = BasePanViewer(h5['Acquisition0'])
-        self.Concurrent = BasePanViewer(h5['Acquisition1'])
-        self.Spectrum = BaseSpecViewerROI(h5['Acquisition2'])
-
-    def get_img_overlay(self):
-        img_ov = hv.Overlay([
-                    self.Survey.get_dmap(),
-                    self.Concurrent.get_dmap(),
-                    self.Spectrum.get_dmap()*self.Spectrum.get_polys()]) 
-        img_ov.opts(toolbar='above', normalize=False)
-        return img_ov.collate()
-
-    def view(self):
-        sidebar_tuples = []
-        for class_ in [self.Spectrum, self.Concurrent, self.Survey]:
-            use_params = [class_.param.alpha, class_.param.thresholds]
-            if class_.title == 'Spectrum':
-                use_params.append(class_.get_band_panel())
-                class_.alpha = 0.5
-            else: class_.alpha = 1         
-            sidebar_tuples.append((class_.title, pn.Column(*use_params)))
-
-        sidebar = pn.Accordion(*sidebar_tuples, active=[0])
-        return pn.Row(
-                    sidebar,
-                    pn.pane.HoloViews( self.get_img_overlay(), linked_axes=False),
-                    self.Spectrum.get_roi_panel(),
-                    background='white')
-
-
+        return pn.Row(self.get_controls(),
+                      self.get_dmap()*self.get_polys(), 
+                      self.get_roi_panel(),
+                      background='white')
 
 
 

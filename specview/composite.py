@@ -4,6 +4,7 @@ The classes here combine the viewer classes into complex dashboards.
 
 import holoviews as hv
 import panel as pn
+pn.extension()
 import param
 
 from specview.viewers import BasePanViewer, BaseSpecViewerROI
@@ -29,25 +30,32 @@ class MultiView(param.Parameterized):
                     self.Survey.get_dmap(),
                     self.Concurrent.get_dmap(),
                     self.Spectrum.get_dmap()*self.Spectrum.get_polys()]) 
-        img_ov.opts(toolbar='above', normalize=False)
-        return img_ov.collate()
+        return img_ov.collate().opts(toolbar='above')
+
 
     def view(self):
         sidebar_tuples = []
         for class_ in [self.Spectrum, self.Concurrent, self.Survey]:
-            use_params = [class_.param.alpha, class_.param.thresholds]
+            class_.title = {
+                            'Spectrum' : 'Spectrum',
+                            'Secondary electrons concurrent' : 'Concurrent',
+                            'Secondary electrons survey' : 'Survey'
+                            }[class_.title]
             if class_.title == 'Spectrum':
-                use_params.append(class_.get_band_panel())
                 class_.alpha = 0.5
             else: class_.alpha = 1         
-            sidebar_tuples.append((class_.title, pn.Column(*use_params)))
+            sidebar_tuples.append((class_.title, class_.get_controls()))
 
-        sidebar = pn.Accordion(*sidebar_tuples, active=[0])
+        sidebar = pn.Accordion(*sidebar_tuples, active=[0], width=160)
+
         return pn.Row(
                     sidebar,
                     pn.pane.HoloViews( self.get_img_overlay(), linked_axes=False),
                     self.Spectrum.get_roi_panel(),
                     background='white')
+
+
+
 
 
 
