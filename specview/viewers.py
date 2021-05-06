@@ -212,9 +212,11 @@ class BaseSpecViewerROI(BaseSpecViewer):
         roi = hv.DynamicMap(self.roi_curves, streams=[self.box_stream]).opts(roi_opts)
         roi.opts(xlim=(self.param.band.bounds)) 
 
+        # TO-DO: make line dissapear when no box selected
         line_opts = opts.VLine(color='black', line_dash='dashed', line_width=1)
-        line = hv.VLine(self.center).opts(line_opts)
-
+        center = np.mean(self.band)
+        line = hv.VLine(center).opts(line_opts)
+        
         return roi*line
 
     def get_roi_panel(self):
@@ -231,7 +233,7 @@ class BaseSpecViewerROI(BaseSpecViewer):
     def view(self):
         return pn.Row(self.get_controls(),
                       self.get_dmap()*self.get_polys(), 
-                      self.get_roi_panel(),
+                      self.get_roi_panel,
                       background='white')
 
 
